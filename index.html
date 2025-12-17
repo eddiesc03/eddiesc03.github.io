@@ -1,19 +1,111 @@
 <!DOCTYPE html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <title>Welcome to my GitHub Page</title>
+  <meta charset="UTF-8">
+  <title>Edward Collins | GitHub Portfolio</title>
   <style>
     body {
       background-color: #1e1e1e;
-      color: white;
-      font-family: sans-serif;
+      color: #f0f0f0;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    header {
       text-align: center;
-      padding: 5em;
+      padding: 3vh 2vw;
+      background-color: #2c2c2c;
+    }
+    header img {
+      width: 150px;
+      height: 150px;
+      border-radius: 50%;
+      border: 4px solid #444;
+    }
+    header h1 {
+      margin: 1vh 0 0;
+      font-size: clamp(1.8rem, 3vw, 2.5rem);
+    }
+    header p {
+      margin: 0.5vh 0;
+      font-size: clamp(1rem, 1.5vw, 1.2rem);
+    }
+    section {
+      max-width: 900px;
+      margin: 4vh auto;
+      padding: 0 2vw;
+    }
+    h2 {
+      border-bottom: 2px solid #444;
+      padding-bottom: 0.5em;
+      margin-bottom: 1em;
+      font-size: clamp(1.4rem, 2.5vw, 2rem);
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+    li {
+      margin: 1em 0;
+      background-color: #2c2c2c;
+      padding: 1em;
+      border-radius: 0.5em;
+    }
+    a {
+      color: #4da3ff;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    footer {
+      text-align: center;
+      padding: 2vh;
+      background-color: #2c2c2c;
+      font-size: 0.9rem;
     }
   </style>
 </head>
 <body>
-  <h1>Hello, I'm Edward 👋</h1>
-  <p>This is my personal GitHub Page at <strong>eddiesc03.github.io</strong></p>
+  <header>
+    <!-- Make sure profile pic.png is in the repo root -->
+    <img src="profile pic.png" alt="Edward Collins Profile Picture">
+    <h1>Edward Collins</h1>
+    <p>he/him • Liverpool • <a href="mailto:eddiesc03@gmail.com">eddiesc03@gmail.com</a></p>
+  </header>
+
+  <section>
+    <h2>About Me</h2>
+    <p>Third-year Computer Science & Electronic Engineering student at the University of Liverpool. 
+       Passionate about autonomous systems, UI/UX design, and creative engineering projects that blend technical rigor with playful design.</p>
+  </section>
+
+  <section>
+    <h2>Projects</h2>
+    <ul>
+      <li>
+        <strong><a href="https://github.com/eddiesc03/chessbot">chessbot</a></strong><br>
+        Over-the-board chess AI opponent (Python)
+      </li>
+      <li>
+        <strong><a href="https://github.com/eddiesc03/comicWorld">comicWorld</a></strong><br>
+        Random comics and creative sketches (Python)
+      </li>
+      <li>
+        <strong><a href="https://github.com/eddiesc03">GitHub Profile</a></strong><br>
+        My GitHub profile and contributions
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Skills</h2>
+    <p>Python • JavaScript • HTML/CSS • UI/UX Design • Sensor Fusion • Edge AI • Git</p>
+  </section>
+
+  <footer>
+    © 2025 Edward Collins — Built with ❤️ on GitHub Pages
+  </footer>
 </body>
 </html>
