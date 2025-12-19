@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Asteroids Extreme JS</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Agency FB', sans-serif;
+        }
+        canvas {
+            background-color: #000;
+            border: 2px solid #555;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+    // --- Setup Canvas and Context ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // --- Global Game Variables ---
+    let ship, alien, b, b1, info, o, shape;
+    let bullets = [], rocks = [], options = [];
+
+    let gameOver, playing, showInfo;
+    let mode = "Basic";
+    let acceleration, rotationSpeed, deceleration, alienSpeed, rockAcceleration;
+    let maxSpeed, maxDist, maxBullets, bulletSpeed, alienBulletSpeed, maxAlienBulletDist;
+    let alienFireFrequency, firstAlien, averageAlien, dotDist, dotSpeed;
+    let score, lives, nextLife, level, t1;
+
+    let mouseX = 0, mouseY = 0;
+
+    // --- Sound Handling ---
+    const sounds = {
+        explosion: new Audio('explosion.wav'),
+        laserShip: new Audio('laser4.wav'),
+        laserAlien: new Audio('laser3.wav')
+    };
+
+    function playSound(sound) {
+        sound.currentTime = 0;
+        sound.play();
+    }
+    
+    // --- PVector Class ---
+    class PVector {
+        constructor(x = 0, y = 0) { this.x = x; this.y = y; }
+        add(v) { this.x += v.x; this.y += v.y; return this; }
+        sub(v) { this.x -= v.x; this.y -= v.y; return this; }
+        mult(n) { this.x *= n; this.y *= n; return this; }
+        mag() { return Math.sqrt(this.x * this.x + this.y * this.y); }
+        setMag(len) {
+            const m = this.mag();
+            if (m > 0) { this.mult(len / m); }
+            return this;
+        }
+        limit(max) {
+            if (this.mag() > max) { this.setMag(max); }
+            return this;
+        }
+        copy() { return new PVector(this.x, this.y); }
+        static random2D() {
+            const angle = Math.random() * 2 * Math.PI;
+            return new PVector(Math.cos(angle), Math.sin(angle));
+        }
+        static dist(v1, v2) {
+            const dx = v1.x - v2.x;
+            const dy = v1.y - v2.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+    }
+
+
+    // --- Game Logic ---
+    function reset() {
+        playing = false;
+        gameOver = false;
+        showInfo = false;
+        score = 0;
+        nextLife = 10000;
+        t1 = 0;
+        o.resetProperties();
+        ship = new Ship();
+        alien = new Alien();
+        bullets = [];
+        rocks = [];
+        for (let j = 0; j < o.t.length; j++) {
+            options[j].lit = false;
+        }
+        options[15].lit = true; // '15' = Basic
+        mode = "Basic";
+    }
+
+    function setup() {
+        canvas.width = 1100;
+        canvas.height = 900;
+        
+        ctx.font = "48px 'Agency FB', sans-serif";
+
+        shape = new ShapeDef();
+        o = new Options();
+        b = new Button(canvas.width / 2 - 200, canvas.height / 2 - 100, 400, 200, "PLAY GAME", 100, true);
+        b1 = new Button(canvas.width / 2 - 200, canvas.height / 2 + 150, 400, 200, "NEW GAME", 100, true);
+        info = new Button(canvas.width - 100, canvas.height - 70, 90, 50, "Info", 25, false);
+
+        for (let i = 0; i < o.t.length; i++) {
+            options.push(new Button(50 + (i % 7) * 1000/7, 600 + (100 * Math.floor(i / 7)), 90, 50, o.t[i], 25, true));
+        }
+        
+        reset();
+        gameLoop();
+    }
+
+    function gameLoop() {
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        if (playing) displayGame();
+        else if (showInfo) displayInfo(canvas.width / 2);
+        else displayStart();
+        if (gameOver) displayGameOver();
+        
+        requestAnimationFrame(gameLoop);
+    }
+
+    function displayInfo(q) {
+        info.display();
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = 'white';
+        ctx.font = "50px 'Agency FB', sans-serif";
+        ctx.fillText("Welcome to Asteroids Extreme!", q, 60);
+        ctx.font = "25px 'Agency FB', sans-serif";
+        const infoText = "Objective: Score points by shooting rocks and aliens. Don't crash!\n\n" +
+            "How to play: Use Left/Right arrows to rotate. Up arrow to thrust. Space bar to shoot. 'r' to restart.\n\n" +
+            "Take your pick from the different spaceships on offer and good luck on your intergalactic adventure!\n\n" +
+            "Modes: \n" +
+            "Alien Attack: Many lives, but powerful aliens!\n" +
+            "Basic: Classic arcade experience.\n" +
+            "Bomber: Big bullets, but watch out for pebbles.\n" +
+            "Boulders: Rocks are twice as tough.\n" +
+            "Explosive: Many rocks, but close-range, powerful weapons.\n" +
+            "FlatLand Defense: Your ship is constrained to 1-dimension.\n" +
+            "Gentle: A sluggish ship that requires careful management.\n" +
+            "Impossible: You've been warned!\n" +
+            "Pebbles: Starts hard and stays hard.\n" +
+            "Random Ship: A different mode every time.\n" +
+            "Reverse Ship: Your bullets fire backwards!\n" +
+            "Rocky: More rocks, but a more powerful ship.\n" +
+            "Solitary Shooter: Fewer aliens, but fewer bullets.\n" +
+            "Speedy Destroyer: No spare lives, but a very nimble ship.\n" +
+            "Teleporter: Press 't' to teleport to a random location.\n" +
+            "Warship: Triple bullets, but more rocks than ever!";
+        const lines = infoText.split('\n');
+        let yPos = 120;
+        ctx.textAlign = "left";
+        for (const line of lines) {
+            ctx.fillText(line, 40, yPos);
+            yPos += 30;
+        }
+    }
+
+    function displayStart() {
+        if (rocks.length == 0) { newRocks(); newRocks(); }
+        for (const rock of rocks) { rock.moveRock(); }
+        b.display();
+        ctx.fillStyle = 'white'; ctx.font = "100px 'Agency FB', sans-serif";
+        ctx.textAlign = "center"; ctx.fillText("ASTEROIDS EXTREME", canvas.width / 2, 180);
+        for (const btn of options) { btn.display(); }
+        info.display();
+    }
+
+    function displayGameOver() {
+        ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = 'white';
+        ctx.font = "100px 'Agency FB', sans-serif"; ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 50);
+        b1.display();
+    }
+    
+    function displayGame() {
+        canvas.style.cursor = gameOver ? 'default' : 'none';
+        ship.moveShip(); alien.controlAlien();
+
+        if (rocks.length == 0 && !alien.moving) {
+            t1++;
+            if (t1 > 60 && !alien.moving) { newRocks(); t1 = 0; }
+        }
+
+        if (ship.hit(alien.pos, alien.r) && alien.moving) {
+            alien.hitAlien(); ship.resetShip();
+        }
+
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            const bullet = bullets[i];
+            bullet.moveBullet();
+            if (bullet.type !== 'dot') {
+                if (PVector.dist(bullet.pos, alien.pos) < alien.r && bullet.dist > 4 && alien.moving) {
+                    alien.hitAlien(); removeBullet(i); continue;
+                }
+                if (bullet.type !== 'ship' && ship.hit(bullet.pos, 10) && bullet.dist > 4) {
+                    ship.resetShip(); removeBullet(i); continue;
+                }
+            }
+            // **FIX 1**: Corrected bullet type checks for removal
+            if ((bullet.dist > maxDist / bulletSpeed && bullet.type === 'ship') ||
+                (bullet.dist > dotDist / dotSpeed && bullet.type === 'dot') ||
+                (bullet.dist > maxAlienBulletDist / alienBulletSpeed && (bullet.type === 'alien' || bullet.type === 'alien_aimed'))) {
+                removeBullet(i);
+            }
+        }
+
+        for (let i = rocks.length - 1; i >= 0; i--) {
+            const rock = rocks[i];
+            rock.moveRock();
+            if (PVector.dist(rock.pos, alien.pos) < alien.r + rock.r && alien.moving) {
+                alien.hitAlien(); rockHit(i); continue;
+            }
+            if (ship.hit(rock.pos, rock.r)) {
+                ship.resetShip(); rockHit(i); continue;
+            }
+            for (let j = bullets.length - 1; j >= 0; j--) {
+                const bullet = bullets[j];
+                if (bullet.type !== 'dot') {
+                    if (PVector.dist(bullet.pos, rock.pos) < 5 + rock.r) {
+                        rockHit(i); removeBullet(j); break;
+                    }
+                }
+            }
+        }
+        
+        ctx.fillStyle = 'white'; ctx.textAlign = "left"; ctx.textBaseline = "top";
+        ctx.font = "50px 'Agency FB', sans-serif"; ctx.fillText(score, 50, 50);
+        ctx.font = "20px 'Agency FB', sans-serif"; ctx.fillText(mode, 5, canvas.height - 25);
+        for (let i = 0; i < lives; i++) ship.drawShipIcon(i * 50 + 50, 110);
+        
+        if (score >= nextLife) { lives++; nextLife += 10000; }
+        if (lives < 1) gameOver = true;
+    }
+
+    function makeDots(pos, n) {
+        for (let i = 0; i < n; i++) bullets.push(new Bullet({ type: 'dot', pos: pos }));
+    }
+    
+    function edges(pos, r) {
+        if (pos.x < -r) pos.x = canvas.width + r; if (pos.x > canvas.width + r) pos.x = -r;
+        if (pos.y < -r) pos.y = canvas.height + r; if (pos.y > canvas.height + r) pos.y = -r;
+        return pos;
+    }
+
+    function newRocks() {
+        for (let i = 0; i < level; i++) rocks.push(new Rock({}));
+        if (playing) level++;
+        alien.aiming = true;
+    }
+
+    function rockHit(i) {
+        const rock = rocks[i];
+        const originalSize = rock.r; // **FIX 2**: Capture size before splitting
+        makeDots(rock.pos, Math.round(originalSize / 10));
+
+        if (!gameOver) {
+            if (originalSize <= 20) score += 100;
+            else if (originalSize <= 40) score += 50;
+            else if (originalSize >= 80) score += 20;
+        }
+
+        if (originalSize > 25) { // Use a threshold slightly above 20
+            const newSize = originalSize / 2;
+            rock.r = newSize; // Halve the size of the existing rock
+            rocks.push(new Rock({ newr: newSize, newpos: rock.pos, oldv: rock.v }));
+            rock.v.mult(Math.random() * (rockAcceleration - 1) + 1).add(PVector.random2D());
+        } else {
+            rocks.splice(i, 1);
+        }
+        playSound(sounds.explosion);
+    }
+    
+    function removeBullet(i) { bullets.splice(i, 1); }
+    
+    // --- Classes ---
+    class Alien {
+        constructor() {
+            this.pos = new PVector(-10, Math.random() * canvas.height);
+            this.v = new PVector(alienSpeed, 0);
+            this.r = 30; this.aiming = false; this.moving = false;
+            this.t1 = firstAlien; this.t2 = 0; this.t3 = 0; this.fire = 0;
+        }
+        moveAlien() {
+            this.pos.add(this.v); this.pos = edges(this.pos, this.r);
+            shape.draw(shape.alien, this.pos.x, this.pos.y, this.r * 2, this.r * 2);
+            this.t3++;
+            if (this.t3 > 200) {
+                this.t3 = Math.floor(Math.random() * 70);
+                this.v.y = 2 * Math.round(Math.random() * 2.8 - 1.4);
+            }
+            this.fire++;
+            if (this.fire > alienFireFrequency) {
+                this.fire = 0;
+                if (ship.moving) {
+                    if (!this.aiming) bullets.push(new Bullet({ type: 'alien', pos: this.pos }));
+                    else bullets.push(new Bullet({ type: 'alien_aimed', pos: this.pos, target: ship.pos }));
+                    playSound(sounds.laserAlien);
+                }
+            }
+        }
+        hitAlien() {
+            this.moving = false; if (!gameOver) score += 200;
+            playSound(sounds.explosion);
+        }
+        controlAlien() {
+            if ( (this.pos.x > canvas.width + this.r - 10 && this.v.x > 0) || (this.pos.x < 10 - this.r && this.v.x < 0) ) { this.moving = false; }
+            if (this.moving) this.moveAlien();
+            if (!this.moving) {
+                this.t2++;
+                if (this.t2 > this.t1) {
+                    this.t2 = 0; this.t1 = Math.floor(Math.random() * 2 * averageAlien);
+                    this.moving = true;
+                    if (Math.random() < 0.5) { this.pos.x = -10; this.v.x = alienSpeed; } 
+                    else { this.pos.x = canvas.width + 10; this.v.x = -alienSpeed; }
+                    this.pos.y = Math.random() * canvas.height;
+                    this.aiming = !this.aiming; this.r = this.aiming ? 15 : 30;
+                }
+            }
+        }
+    }
+
+    class Bullet {
+        constructor(config) {
+            this.pos = new PVector(-100, -100);
+            this.v = new PVector(0, 0);
+            this.dist = 0;
+            this.type = config.type || 'ship';
+
+            switch(this.type) {
+                case 'ship':
+                    this.pos = ship.pos.copy();
+                    const mag = bulletSpeed;
+                    this.v.x = mag * Math.cos(ship.a);
+                    this.v.y = mag * Math.sin(ship.a);
+                    if (mode === "Reverse Ship") this.v.mult(-1);
+                    break;
+                case 'alien':
+                    this.pos = config.pos.copy();
+                    this.v = PVector.random2D().setMag(alienBulletSpeed);
+                    break;
+                case 'alien_aimed':
+                    this.pos = config.pos.copy();
+                    this.v = config.target.copy().sub(this.pos).setMag(alienBulletSpeed).add(PVector.random2D());
+                    break;
+                case 'dot':
+                    this.pos = config.pos.copy();
+                    this.v = PVector.random2D().setMag(6);
+                    if (mode === "Explosive") this.type = 'ship';
+                    break;
+            }
+        }
+        moveBullet() {
+            this.pos.add(this.v); this.dist++;
+            let r = 5;
+            if (mode === "Bomber" && this.type === 'ship') r = 15;
+            this.pos = edges(this.pos, r);
+            ctx.fillStyle = '#FFF'; ctx.beginPath();
+            ctx.arc(this.pos.x, this.pos.y, r / 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    
+    class Button {
+        constructor(x, y, w, h, s, size, lit) {
+            Object.assign(this, { x, y, w, h, s, size, lit });
+        }
+        
+        getDisplayWidth() {
+            ctx.font = `${this.size}px 'Agency FB', sans-serif`;
+            const textWidth = ctx.measureText(this.s).width;
+            const padding = this.size > 50 ? 40 : 20; // More padding for bigger buttons
+            return Math.max(this.w, textWidth + padding);
+        }
+
+        display() {
+            const displayW = this.getDisplayWidth();
+            const displayX = this.x + (this.w - displayW) / 2; // Center the button if it expands
+            
+            // Draw button background
+            ctx.fillStyle = '#222';
+            ctx.strokeStyle = this.lit ? '#FFF' : '#777';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.rect(displayX, this.y, displayW, this.h);
+            ctx.fill();
+            ctx.stroke();
+
+            // Draw text
+            ctx.fillStyle = 'white';
+            ctx.font = `${this.size}px 'Agency FB', sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(this.s, this.x + this.w / 2, this.y + this.h / 2);
+        }
+
+        pressed() {
+            const displayW = this.getDisplayWidth();
+            const displayX = this.x + (this.w - displayW) / 2;
+            return (mouseX > displayX && mouseX < displayX + displayW && mouseY > this.y && mouseY < this.y + this.h);
+        }
+    }
+    
+    class Rock {
+        constructor(config) {
+            if (config.newr) {
+                this.r = config.newr; this.pos = config.newpos.copy();
+                this.v = config.oldv.copy().mult(Math.random() * (rockAcceleration - 1) + 1).add(PVector.random2D());
+                if (this.v.mag() < 0.2) this.v.setMag(0.2);
+            } else {
+                this.pos = new PVector(Math.random() * canvas.width, Math.random() * canvas.height);
+                while (PVector.dist(this.pos, new PVector(canvas.width / 2, canvas.height / 2)) < 350) {
+                    this.pos.x = Math.random() * canvas.width; this.pos.y = Math.random() * canvas.height;
+                }
+                this.v = PVector.random2D().mult(Math.random() * 2 + 1); this.r = 80;
+                if (mode === "Boulders") this.r = 160;
+                if (mode === "Pebbles") this.r = 20;
+            }
+            this.rockShapeIndex = Math.floor(Math.random() * 4); this.rotation = 0;
+            this.rotationSpeed = this.v.mag() / 200;
+        }
+
+        moveRock() {
+            this.pos.add(this.v); this.pos = edges(this.pos, this.r); this.rotation += this.rotationSpeed;
+            const shapes = [shape.rock1, shape.rock2, shape.rock3, shape.rock4];
+            shape.draw(shapes[this.rockShapeIndex], this.pos.x, this.pos.y, this.r * 2, this.r * 2, this.rotation);
+        }
+    }
+    
+    class ShapeDef {
+        constructor() {
+            this.rock1 = [[1,.1],[.7,.8],[.1,1],[-.7,.7],[-.4,.4],[-.8,.5],[-1,-.1],[-.6,-.7],[-.1,-1],[.6,-.7],[.4,-.4],[.8,-.5]];
+            this.rock2 = [[1,.1],[.7,.8],[.3,.3],[.1,1],[-.7,.7],[-.4,.4],[-1,-.1],[-.6,-.7],[-.1,-1],[.6,-.7],[.4,-.4],[.6,-.5],[.8,-.5]];
+            this.rock3 = [[1,.1],[.7,.6],[.1,.1],[.7,.8],[.1,1],[-.7,.7],[-.7,.4],[-1,0],[-.6,-.7],[0,-1],[.6,-.7],[.4,-.4],[.6,-.5],[.8,-.5]];
+            this.rock4 = [[1,.1],[.7,.6],[.8,.8],[.7,.8],[.1,1],[-.7,.7],[-.7,.4],[-1,0],[-.6,-.7],[0,-1],[.6,-.7],[.4,-.4],[.6,-.5],[.8,-.5]];
+            let alienVerts = [[.5,-.3],[.5,-1],[-.5,-1],[-.5,-.3]];
+            for (let i = 5; i < 11; i += 0.5) alienVerts.push([Math.cos(i), Math.sin(i)/2]);
+            this.alien = alienVerts;
+        }
+
+        draw(verts, x, y, w, h, rotation = 0) {
+            ctx.save(); ctx.translate(x, y); ctx.rotate(rotation);
+            ctx.beginPath();
+            ctx.moveTo(verts[0][0] * w / 2, verts[0][1] * h / 2);
+            for (let i = 1; i < verts.length; i++) {
+                ctx.lineTo(verts[i][0] * w / 2, verts[i][1] * h / 2);
+            }
+            ctx.closePath(); ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    class Ship {
+        constructor() {
+            this.pos = new PVector(canvas.width / 2, canvas.height / 2);
+            this.v = new PVector(0, 0); this.a = -Math.PI / 2;
+            this.up = false; this.left = false; this.right = false; this.moving = false; this.t1 = 0;
+        }
+        moveShip() {
+            if (this.moving) {
+                if (this.right) this.a += rotationSpeed; if (this.left) this.a -= rotationSpeed;
+                if (this.up) {
+                    this.v.x += Math.cos(this.a) * acceleration; this.v.y += Math.sin(this.a) * acceleration;
+                } else if (this.v.mag() > 0) { this.v.setMag(this.v.mag() - deceleration); }
+                this.v.limit(maxSpeed); this.pos.add(this.v);
+                if (mode === "Flatland Defense") this.pos.y = canvas.height / 2;
+                this.pos = edges(this.pos, 30); this.drawShip();
+            } else {
+                this.t1++;
+                if (this.t1 > 60) {
+                    let rockInCenter = rocks.some(r => PVector.dist(r.pos, new PVector(canvas.width / 2, canvas.height / 2)) < r.r + 100);
+                    if (!rockInCenter) {
+                        if (lives > 0) this.moving = true;
+                        this.pos.x = canvas.width / 2; this.pos.y = canvas.height / 2;
+                        this.a = -Math.PI / 2; this.v = new PVector(0, 0);
+                    }
+                } else if (score > 0) this.drawHitShip();
+            }
+        }
+        hit(pos1, r1) {
+            if (!this.moving) return false;
+            const points = [ [25, 0], [-25, 15], [-25, -15] ];
+            for(const p of points) {
+                const worldX = this.pos.x + (p[0] * Math.cos(this.a) - p[1] * Math.sin(this.a));
+                const worldY = this.pos.y + (p[0] * Math.sin(this.a) + p[1] * Math.cos(this.a));
+                if (PVector.dist(pos1, new PVector(worldX, worldY)) < r1 + 5) return true;
+            }
+            return false;
+        }
+        drawShip() {
+            ctx.save(); ctx.translate(this.pos.x, this.pos.y); ctx.rotate(this.a);
+            ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.beginPath();
+            ctx.moveTo(25, 0); ctx.lineTo(-25, 15); ctx.moveTo(25, 0); ctx.lineTo(-25, -15);
+            ctx.moveTo(-11, -12); ctx.lineTo(-11, 12); ctx.stroke();
+            if (this.up) this.drawFlame();
+            ctx.restore();
+        }
+        drawShipIcon(x, y) {
+            ctx.save(); ctx.translate(x, y); ctx.rotate(-Math.PI / 2);
+            ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.beginPath();
+            ctx.moveTo(15, 0); ctx.lineTo(-15, 9); ctx.moveTo(15, 0); ctx.lineTo(-15, -9);
+            ctx.moveTo(-7, -7); ctx.lineTo(-7, 7); ctx.stroke();
+            ctx.restore();
+        }
+        drawFlame() {
+            ctx.beginPath(); ctx.moveTo(-14, -6); ctx.lineTo(-23, 0); ctx.moveTo(-14, 6); ctx.lineTo(-23, 0);
+            ctx.stroke();
+        }
+        drawHitShip() {
+            ctx.save(); ctx.translate(this.pos.x, this.pos.y); ctx.rotate(this.a);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${1 - this.t1 / 60})`; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(25, this.t1/2); ctx.lineTo(-25, 15 + this.t1/2);
+            ctx.moveTo(25, -this.t1/2); ctx.lineTo(-25, -15 - this.t1/2); ctx.stroke();
+            ctx.restore();
+        }
+        resetShip() { lives--; this.t1 = 0; this.moving = false; playSound(sounds.explosion); }
+    }
+
+    class Options {
+        constructor() {
+            this.t = ["Random Ship", "Gentle", "Alien Attack", "Speedy Destroyer", "Rocky", "Warship", "Bomber", "Boulders", "Pebbles", "Solitary Shooter", "Impossible", "Explosive", "Flatland Defense", "Teleporter", "Reverse Ship", "Basic"];
+        }
+        resetProperties() {
+            acceleration = .25; rotationSpeed = .11; deceleration = .03; maxSpeed = 10;
+            maxDist = 500; maxBullets = 3; bulletSpeed = 15; alienBulletSpeed = 13; maxAlienBulletDist = 500;
+            alienSpeed = 2; alienFireFrequency = 50; firstAlien = 800; averageAlien = 300;
+            rockAcceleration = 1.4; dotDist = 120; dotSpeed = 7; lives = 3; level = 4;
+        }
+        mousePressed() {
+            for (let i = 0; i < this.t.length; i++) {
+                if (options[i].pressed()) {
+                    for (let j = 0; j < this.t.length; j++) options[j].lit = false;
+                    options[i].lit = true;
+                    this.resetProperties(); mode = this.t[i]; let modeIndex = i;
+                    if (mode === "Random Ship") {
+                        modeIndex = Math.floor(Math.random() * 14) + 1; mode = this.t[modeIndex];
+                    }
+                    if (modeIndex === 1) { acceleration = .125; deceleration = .06; maxBullets = 2; alienFireFrequency = 100; averageAlien = 600; rockAcceleration = 1.1; level = 2; } 
+                    else if (modeIndex === 2) { maxBullets = 5; alienFireFrequency = 20; firstAlien = 400; averageAlien = 200; lives = 7; } 
+                    else if (modeIndex === 3) { acceleration = .5; deceleration = 0; maxSpeed = 12; lives = 1; averageAlien = 600; } 
+                    else if (modeIndex === 4) { level = 12; lives = 5; maxBullets = 6; averageAlien = 1000; } 
+                    else if (modeIndex === 5) { level = 25; maxBullets = 8; averageAlien = 250; } 
+                    else if (modeIndex === 6) { lives = 5; maxBullets = 2; } 
+                    else if (modeIndex === 7) { level = 2; lives = 5; maxBullets = 4; } 
+                    else if (modeIndex === 8) { lives = 2; level = 50; } 
+                    else if (modeIndex === 9) { firstAlien = 2000; averageAlien = 2500; alienFireFrequency = 120; maxBullets = 1; bulletSpeed = 20; } 
+                    else if (modeIndex === 10) { lives = 1; level = 10; alienFireFrequency = 10; firstAlien = 200; averageAlien = 200; } 
+                    else if (modeIndex === 11) { level = 40; maxDist = 110; } 
+                    else if (modeIndex === 12) { lives = 5; firstAlien = 1200; averageAlien = 1000; } 
+                    else if (modeIndex === 13) { lives = 2; } 
+                    else if (modeIndex === 14) { lives = 5; }
+                }
+            }
+        }
+    }
+    
+    // --- Event Listeners ---
+    const keys = {};
+    window.addEventListener('keydown', e => {
+        keys[e.key] = true;
+        if (e.key === 'r') { gameOver = true; canvas.style.cursor = 'default'; reset(); }
+        if (ship && ship.moving && !gameOver && e.key === ' ' && !keys.processedSpace) {
+            let shipBullets = bullets.filter(b => b.type === 'ship').length;
+            if (shipBullets < maxBullets) {
+                bullets.push(new Bullet({ type: 'ship' }));
+                if (mode === "Warship") {
+                    ship.a -= Math.PI / 10; bullets.push(new Bullet({ type: 'ship' }));
+                    ship.a += Math.PI / 5; bullets.push(new Bullet({ type: 'ship' }));
+                    ship.a -= Math.PI / 10;
+                }
+                playSound(sounds.laserShip);
+            }
+            keys.processedSpace = true; // Prevent holding space
+        }
+         if (ship && ship.moving && e.key === 't' && mode === "Teleporter") {
+            ship.pos.x = Math.random() * canvas.width; ship.pos.y = Math.random() * canvas.height;
+        }
+    });
+
+    window.addEventListener('keyup', e => {
+        keys[e.key] = false;
+        if (e.key === ' ') keys.processedSpace = false;
+    });
+    
+    function handleShipMovement(){
+        if(ship && !gameOver){
+            ship.up = keys['ArrowUp'] || false;
+            ship.left = keys['ArrowLeft'] || false;
+            ship.right = keys['ArrowRight'] || false;
+        }
+    }
+    
+    setInterval(handleShipMovement, 1000/60); // Handle movement smoothly
+
+    canvas.addEventListener('mousedown', e => {
+        o.mousePressed();
+        if (info.pressed()) showInfo = !showInfo;
+        if (b.pressed()) {
+            if (!playing) { playing = true; rocks = []; }
+        }
+        if (b1.pressed()) { if (gameOver) reset(); }
+    });
+
+    canvas.addEventListener('mousemove', e => {
+        const rect = canvas.getBoundingClientRect();
+        mouseX = e.clientX - rect.left; mouseY = e.clientY - rect.top;
+    });
+
+    // --- Start Game ---
+    setup();
+
+    </script>
+</body>
+</html>
