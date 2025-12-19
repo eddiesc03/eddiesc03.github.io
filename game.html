@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>JavaScript Block Game</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden; /* Prevents scrollbars */
+            transition: background-color 0.3s;
+        }
+
+        #game-container {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        canvas {
+            border: 2px solid;
+            transition: border-color 0.3s;
+        }
+        
+        #theme-toggle {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 50px;
+            height: 50px;
+            font-size: 28px;
+            cursor: pointer;
+            border: 2px solid;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+            transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+            z-index: 10;
+        }
+        
+        #mobile-controls {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            display: none; /* Hidden by default */
+            justify-content: space-around;
+            align-items: center;
+            user-select: none;
+            z-index: 10;
+        }
+        
+        /* Show controls on touch devices / small screens */
+        @media (max-width: 768px) {
+            #mobile-controls {
+                display: flex;
+            }
+        }
+        
+        .controls-dpad {
+            display: grid;
+            grid-template-areas: ". up ." "left down right";
+            gap: 15px;
+        }
+
+        .control-btn {
+            width: 70px;
+            height: 70px;
+            background-color: rgba(128, 128, 128, 0.5);
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            border-radius: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 40px;
+            color: white;
+            cursor: pointer;
+        }
+        
+        .control-btn.rotate {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            font-size: 45px;
+        }
+        
+        .control-btn:active {
+            background-color: rgba(200, 200, 200, 0.7);
+        }
+
+        #btn-left { grid-area: left; }
+        #btn-right { grid-area: right; }
+        #btn-down { grid-area: down; }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="theme-toggle">🌙</div>
+        <div id="mobile-controls">
+            <div class="controls-dpad">
+                <div class="control-btn" id="btn-left">←</div>
+                <div class="control-btn" id="btn-right">→</div>
+                <div class="control-btn" id="btn-down">↓</div>
+            </div>
+            <div class="control-btn rotate" id="btn-rotate">↻</div>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const themeToggleButton = document.getElementById('theme-toggle');
+        
+        // --- Game State & Sizing Variables ---
+        let cellSize; 
+        const gridWidth = 10;
+        const gridHeight = 13;
+        const totalGridWidth = 14; 
+        let currentShape, nextShape, f, c2, score, isGameOver;
+
+        // --- THEME MANAGEMENT ---
+        const lightTheme = {
+            bg: '#FFF',
+            bodyBg: '#EEE',
+            grid: '#EEE',
+            border: '#000',
+            sidebarBg: '#000',
+            sidebarText: '#0F0',
+            gameOverBg: 'rgba(0, 0, 0, 0.75)',
+            gameOverText: '#FFF',
+            toggleBg: '#FFF',
+            toggleText: '#000',
+        };
+        const darkTheme = {
+            bg: '#1a1a1a',
+            bodyBg: '#121212',
+            grid: '#444',
+            border: '#FFF',
+            sidebarBg: '#000',
+            sidebarText: '#0F0',
+            gameOverBg: 'rgba(255, 255, 255, 0.75)',
+            gameOverText: '#000',
+            toggleBg: '#333',
+            toggleText: '#FFF',
+        };
+        let isDarkMode = false;
+        let currentTheme = lightTheme;
+
+        // --- Shape Data ---
+const shapesData = [
+            // --- Monomino (1 Block) ---
+            { c: 'rgb(100, 100, 100)', t: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, // O1
+
+            // --- Domino (2 Blocks) ---
+            { c: 'rgb(180, 180, 180)', t: [0, 0, 0, 1, 0, 0, 0, 0, 0, 0] }, // I2
+
+            // --- Trominoes (3 Blocks) ---
+            { c: 'rgb(139, 69, 19)',   t: [0, -1, 0, 0, 0, 1, 0, 0, 0, 0] }, // I3
+            { c: 'rgb(160, 82, 45)',   t: [0, 0, 0, 1, 1, 1, 0, 0, 0, 0] }, // L3
+
+            // --- Tetrominoes (4 Blocks - The classic 7) ---
+            { c: 'rgb(0, 255, 255)',   t: [0, -1, 0, 0, 0, 1, 0, 2, 0, 0] }, // I4 (Cyan)
+            { c: 'rgb(238, 201, 0)',   t: [0, 0, 1, 0, 0, 1, 1, 1, 0, 0] }, // O4 (Yellow)
+            { c: 'rgb(128, 0, 128)',   t: [0, 0, -1, 0, 1, 0, 0, 1, 0, 0] }, // T4 (Purple)
+            { c: 'rgb(0, 0, 255)',     t: [0, -1, 0, 0, 0, 1, -1, 1, 0, 0] },// J4 (Blue)
+            { c: 'rgb(255, 165, 0)',   t: [0, -1, 0, 0, 0, 1, 1, 1, 0, 0] }, // L4 (Orange)
+            { c: 'rgb(0, 255, 0)',     t: [0, 0, 1, 0, -1, 1, 0, 1, 0, 0] }, // S4 (Green)
+            { c: 'rgb(255, 0, 0)',     t: [0, 0, -1, 0, 1, 1, 0, 1, 0, 0] }, // Z4 (Red)
+
+            // --- Pentominoes (5 Blocks - All 12 shapes + their 6 reflections) ---
+            { c: 'rgb(255, 0, 255)',   t: [0, 0, -1, 0, 1, 0, 0, -1, 0, 1] }, // X5 (Magenta)
+            { c: 'rgb(0, 128, 0)',     t: [0, -2, 0, -1, 0, 0, 0, 1, 0, 2] }, // I5 (Dark Green)
+            { c: 'rgb(255, 105, 180)', t: [0, 0, 1, 0, 0, -1, 0, 1, -1, 1] }, // F5 (Hot Pink)
+            { c: 'rgb(255, 20, 147)', t: [0, 0, -1, 0, 0, -1, 0, 1, 1, 1] }, // F5' (Deep Pink)
+            { c: 'rgb(75, 0, 130)',    t: [0, -1, 0, 0, 0, 1, 1, 1, 1, 0] }, // L5 (Indigo)
+            { c: 'rgb(148, 0, 211)',  t: [0, -1, 0, 0, 0, 1, -1, 1, -1, 0] }, // J5 (Dark Violet)
+            { c: 'rgb(255, 127, 80)',  t: [0, 0, 0, 1, 1, 1, -1, 0, -1, -1] },// N5 (Coral)
+            { c: 'rgb(255, 99, 71)',   t: [0, 0, 0, -1, -1, -1, 1, 0, 1, 1] }, // N5' (Tomato)
+            { c: 'rgb(60, 179, 113)',  t: [0, 0, 1, 0, 0, 1, 1, 1, 0, -1] }, // P5 (Medium Sea Green)
+            { c: 'rgb(46, 139, 87)',   t: [0, 0, -1, 0, 0, 1, -1, 1, 0, -1] },// Q5 (Sea Green)
+            { c: 'rgb(218, 165, 32)',  t: [-1, 0, 0, 0, 1, 0, 0, -1, 0, 1] }, // T5 (Goldenrod) - Note: this is a different T
+            { c: 'rgb(0, 191, 255)',   t: [-1, 0, 1, 0, -1, 1, 0, 1, 1, 1] }, // U5 (Deep Sky Blue)
+            { c: 'rgb(255, 215, 0)',   t: [0, 0, -1, 0, -1, 1, 1, 0, 1, -1] },// V5 (Gold)
+            { c: 'rgb(106, 90, 205)',  t: [-1, 0, 0, 0, 0, 1, 1, 1, 1, 2] },  // W5 (Slate Blue)
+            { c: 'rgb(255, 69, 0)',    t: [0, -1, 0, 0, 0, 1, 0, 2, 1, 0] }, // Y5 (Orange-Red)
+            { c: 'rgb(255, 140, 0)',   t: [0, -1, 0, 0, 0, 1, 0, 2, -1, 0] },// Y5' (Dark Orange)
+            { c: 'rgb(34, 139, 34)',   t: [-1, -1, 0, -1, 0, 0, 0, 1, 1, 1] }, // Z5 (Forest Green)
+            { c: 'rgb(50, 205, 50)',   t: [1, -1, 0, -1, 0, 0, 0, 1, -1, 1] }  // S5 (Lime Green)
+        ];
+
+        class Shape {
+             constructor() { /* ... unchanged ... */
+                this.x = new Array(5).fill(0);
+                this.y = new Array(5).fill(0);
+                this.y2 = 0; // Smooth y position (in pixels)
+                this.ypos = 0; // Grid y position
+                this.xpos = 4; // Grid x position
+                this.c = 'black';
+             }
+             reset() { /* ... unchanged ... */
+                const q = Math.floor(Math.random() * shapesData.length);
+                const shapeInfo = shapesData[q];
+                this.c = shapeInfo.c;
+                const t = shapeInfo.t;
+                for (let i = 0; i < 5; i++) {
+                    this.x[i] = t[i * 2];
+                    this.y[i] = t[i * 2 + 1];
+                }
+                this.y2 = 0;
+                this.xpos = 4;
+            }
+            move() { /* ... logic is the same, values are dynamic ... */
+                this.y2 += 0.03 * cellSize; // Speed scaled with size
+                this.ypos = Math.floor(this.y2 / cellSize);
+
+                ctx.fillStyle = this.c;
+                for (let i = 0; i < 5; i++) {
+                    ctx.fillRect((this.x[i] + this.xpos) * cellSize, (this.y[i] * cellSize) + this.y2, cellSize, cellSize);
+                }
+
+                for (let j = 0; j < 5; j++) {
+                    const gridX = this.x[j] + this.xpos;
+                    const gridY = this.y[j] + this.ypos + 1;
+                    if (gridX < 0 || gridX >= gridWidth || gridY >= gridHeight + 1 || (gridY >= 0 && f[gridX][gridY] === 1)) {
+                        this.placeShape();
+                        return;
+                    }
+                }
+            }
+            placeShape() { /* ... unchanged ... */
+                for (let i = 0; i < 5; i++) {
+                    const gridX = this.x[i] + this.xpos;
+                    const gridY = this.y[i] + this.ypos;
+
+                    if (gridY < 1) {
+                        isGameOver = true;
+                        return;
+                    }
+                    if(gridY >= 0 && gridY < gridHeight + 1 && gridX >= 0 && gridX < gridWidth){
+                         f[gridX][gridY] = 1;
+                         c2[gridX][gridY] = this.c;
+                    }
+                }
+                score += 10;
+                
+                this.x = [...nextShape.x];
+                this.y = [...nextShape.y];
+                this.c = nextShape.c;
+                nextShape.reset();
+
+                this.y2 = 0;
+                this.xpos = 4;
+            }
+            drawNextShape() { /* ... unchanged ... */
+                ctx.fillStyle = this.c;
+                for (let i = 0; i < 5; i++) {
+                    ctx.fillRect((this.x[i] + 11.5) * cellSize, (this.y[i] + 5) * cellSize, cellSize, cellSize);
+                }
+            }
+            rotate() { /* ... unchanged ... */
+                for (let i = 0; i < 5; i++) {
+                    const currentX = this.x[i];
+                    const currentY = this.y[i];
+                    this.x[i] = Math.round(-currentY);
+                    this.y[i] = Math.round(currentX);
+                }
+            }
+            handleKeyPress(event) { /* ... unchanged ... */
+                if (isGameOver && event.key === 'r') {
+                    resetGame();
+                    return;
+                }
+                if (isGameOver) return;
+                
+                if (this.ypos >= gridHeight) return;
+
+                if (event.key === 'ArrowUp') {
+                    const tempX = [...this.x];
+                    const tempY = [...this.y];
+                    let canRotate = true;
+
+                    for (let i = 0; i < 5; i++) {
+                        const newX = -tempY[i] + this.xpos;
+                        const newY = tempX[i] + this.ypos;
+                        if (newX < 0 || newX >= gridWidth || newY >= gridHeight || (newY >= 0 && f[Math.round(newX)][Math.round(newY)] === 1)) {
+                            canRotate = false;
+                            break;
+                        }
+                    }
+                    if (canRotate) this.rotate();
+                }
+
+                if (event.key === 'ArrowDown') {
+                    let canMove = true;
+                    for(let i=0; i<5; i++){
+                         const gridX = this.x[i] + this.xpos;
+                         const gridY = this.y[i] + this.ypos + 1;
+                         if(gridY >= gridHeight + 1 || (gridY >= 0 && f[gridX][gridY] === 1)){
+                            canMove = false;
+                            break;
+                         }
+                    }
+                    if (canMove) this.y2 += cellSize;
+                }
+                
+                if (event.key === 'ArrowRight') {
+                     let canMove = true;
+                     for(let i=0; i<5; i++){
+                         const gridX = this.x[i] + this.xpos + 1;
+                         const gridY = this.y[i] + this.ypos;
+                         if(gridX >= gridWidth || (gridY >= 0 && f[gridX][gridY] === 1)){
+                            canMove = false;
+                            break;
+                         }
+                    }
+                    if(canMove) this.xpos++;
+                }
+                
+                if (event.key === 'ArrowLeft') {
+                    let canMove = true;
+                     for(let i=0; i<5; i++){
+                         const gridX = this.x[i] + this.xpos - 1;
+                         const gridY = this.y[i] + this.ypos;
+                         if(gridX < 0 || (gridY >= 0 && f[gridX][gridY] === 1)){
+                            canMove = false;
+                            break;
+                         }
+                    }
+                    if(canMove) this.xpos--;
+                }
+            }
+        }
+
+        function toggleTheme() {
+            isDarkMode = !isDarkMode;
+            currentTheme = isDarkMode ? darkTheme : lightTheme;
+            
+            document.body.style.backgroundColor = currentTheme.bodyBg;
+            canvas.style.borderColor = currentTheme.border;
+            themeToggleButton.style.backgroundColor = currentTheme.toggleBg;
+            themeToggleButton.style.color = currentTheme.toggleText;
+            themeToggleButton.style.borderColor = currentTheme.border;
+            themeToggleButton.textContent = isDarkMode ? '☀️' : '🌙';
+        }
+
+        function resetGame() { /* ... unchanged ... */
+            score = 0;
+            isGameOver = false;
+            
+            f = Array(gridWidth).fill(0).map(() => Array(gridHeight + 1).fill(0));
+            c2 = Array(gridWidth).fill(0).map(() => Array(gridHeight + 1).fill(null));
+            
+            for (let i = 0; i < gridWidth; i++) {
+                f[i][gridHeight] = 1;
+            }
+
+            currentShape = new Shape();
+            nextShape = new Shape();
+            
+            currentShape.reset();
+            nextShape.reset();
+        }
+        
+        function resizeCanvas() { /* ... unchanged ... */
+            const widthToHeight = totalGridWidth / gridHeight;
+            let newWidth = window.innerWidth;
+            let newHeight = window.innerHeight;
+            let newWidthToHeight = newWidth / newHeight;
+        
+            if (newWidthToHeight > widthToHeight) {
+                newWidth = newHeight * widthToHeight;
+            } else {
+                newHeight = newWidth / widthToHeight;
+            }
+        
+            canvas.width = newWidth;
+            canvas.height = newHeight;
+            
+            cellSize = canvas.height / gridHeight;
+        }
+
+        function drawGameOverScreen() {
+            ctx.fillStyle = currentTheme.gameOverBg;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = currentTheme.gameOverText;
+            ctx.font = `${cellSize * 1.5}px Arial`;
+            ctx.fillText('Game Over', canvas.width / 2, canvas.height / 2 - cellSize);
+            
+            ctx.font = `${cellSize * 0.7}px Arial`;
+            ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + cellSize * 0.5);
+            
+            ctx.font = `${cellSize * 0.6}px Arial`;
+            ctx.fillText("Press 'r' to Restart", canvas.width / 2, canvas.height / 2 + cellSize * 1.5);
+        }
+
+        function draw() {
+            // Clear canvas with theme color
+            ctx.fillStyle = currentTheme.bg;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw sidebar
+            const sidebarX = gridWidth * cellSize;
+            const sidebarWidth = 4 * cellSize;
+            ctx.fillStyle = currentTheme.sidebarBg;
+            ctx.fillRect(sidebarX, 0, sidebarWidth, canvas.height);
+
+            // Draw sidebar text
+            ctx.fillStyle = currentTheme.sidebarText;
+            ctx.font = `${cellSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const textX = sidebarX + sidebarWidth / 2;
+            ctx.fillText("Next", textX, cellSize * 1);
+            ctx.fillText("Shape", textX, cellSize * 2);
+            ctx.fillText("Score", textX, cellSize * 11);
+            ctx.fillText(score, textX, cellSize * 12);
+            
+            if (!isGameOver) {
+                nextShape.drawNextShape();
+                currentShape.move();
+            }
+
+            // Draw placed blocks and check for line clears
+            for (let j = 0; j < gridHeight; j++) {
+                let blocksInRow = 0;
+                for (let i = 0; i < gridWidth; i++) {
+                    if (f[i][j] === 1) {
+                        blocksInRow++;
+                        ctx.fillStyle = c2[i][j] || 'gray';
+                        ctx.fillRect(i * cellSize, j * cellSize, cellSize, cellSize);
+                    }
+                }
+                if (blocksInRow === gridWidth) {
+                    score += 100;
+                    for (let l = j; l > 0; l--) {
+                        for (let k = 0; k < gridWidth; k++) {
+                            f[k][l] = f[k][l - 1];
+                            c2[k][l] = c2[k][l - 1];
+                        }
+                    }
+                    for (let k = 0; k < gridWidth; k++) { f[k][0] = 0; c2[k][0] = null; }
+                }
+            }
+            
+            // Draw grid lines with theme color
+            ctx.strokeStyle = currentTheme.grid;
+            ctx.lineWidth = 1;
+            for (let i = 1; i < gridWidth; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * cellSize, 0);
+                ctx.lineTo(i * cellSize, gridHeight * cellSize);
+                ctx.stroke();
+            }
+            for (let j = 1; j < gridHeight; j++) {
+                ctx.beginPath();
+                ctx.moveTo(0, j * cellSize);
+                ctx.lineTo(gridWidth * cellSize, j * cellSize);
+                ctx.stroke();
+            }
+
+            if (isGameOver) {
+                drawGameOverScreen();
+            }
+        }
+        
+        function gameLoop() {
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Event Listeners ---
+        function simulateKeyPress(key) {
+             currentShape.handleKeyPress({ key: key });
+        }
+        
+        window.addEventListener('keydown', (e) => currentShape.handleKeyPress(e));
+        window.addEventListener('resize', resizeCanvas);
+        themeToggleButton.addEventListener('click', toggleTheme);
+
+        // Mobile control listeners
+        document.getElementById('btn-left').addEventListener('touchstart', (e) => { e.preventDefault(); simulateKeyPress('ArrowLeft'); });
+        document.getElementById('btn-right').addEventListener('touchstart', (e) => { e.preventDefault(); simulateKeyPress('ArrowRight'); });
+        document.getElementById('btn-down').addEventListener('touchstart', (e) => { e.preventDefault(); simulateKeyPress('ArrowDown'); });
+        document.getElementById('btn-rotate').addEventListener('touchstart', (e) => { e.preventDefault(); simulateKeyPress('ArrowUp'); });
+
+        // --- Start Game ---
+        resetGame();
+        resizeCanvas();
+        toggleTheme(); // Set initial theme
+        toggleTheme(); // Call twice to default to light
+        gameLoop();
+
+    </script>
+</body>
+</html>
